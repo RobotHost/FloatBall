@@ -11,6 +11,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.support.annotation.Nullable;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -44,10 +45,10 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
     private ImageView ballIv;
     private LinearLayout menuLl;
     private RootLinearLayout rootView;
-    private boolean isRightSide;
-    private boolean isLastSideRight;
-    private boolean isOnlyFullBall;
-    private boolean isOnlySmall;
+    private boolean isRightSide = false;
+    private boolean isLastSideRight = false;
+    private boolean isOnlyFullBall = false;
+    private boolean isOnlySmall = false;
     private boolean isMoved = false;
     private boolean isHasMenu = false;
     private boolean isMenuShowed = false;
@@ -69,6 +70,8 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
     private long clickBallLastTime = 0l;
     private final static long CLICK_BALL_TIME_INTERVAL = 1000l;
 
+    private boolean isCanResetRootView = false;//如果为true，这当在右边时，主浮标和菜单调换位置
+
     @SuppressLint("NewApi")
     public FlyingBallView(Context context, int logoIconRId, @Nullable int[] menuIconRIds, @Nullable Float smallScale, FlyingBallImp.FlyingBallCallback flyingBallCallback) {
         super(context);
@@ -80,6 +83,7 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
         } else {
             this.mSmallScale = smallScale;
         }
+        mFlyingBallCallback = flyingBallCallback;
         BALL_FULL_WIDTH = dip2Px(context, 48);
         BALL_FULL_HEIGHT = dip2Px(context, 48);
         BALL_HALF_WIDTH = (int) (BALL_FULL_WIDTH * smallScale);
@@ -87,6 +91,15 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
         MENU_BTN_WIDTH_HEIGHT = dip2Px(context, 36);
         MENU_BTN_MARGIN = dip2Px(context, 4);
         resToBitmap();
+        createWM();
+        createViews();
+        this.addView(rootView);
+        wm.addView(this, wlp);
+
+        timer = new Timer();
+    }
+
+    private void createWM() {
         wm = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
         DisplayMetrics dm = new DisplayMetrics();
         wm.getDefaultDisplay().getMetrics(dm);
@@ -101,15 +114,10 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
         wlp.format = PixelFormat.RGBA_8888;
         wlp.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
         wlp.gravity = Gravity.LEFT | Gravity.TOP;
-        screenHeight = wm.getDefaultDisplay().getHeight();
         wlp.x = 0;
         wlp.y = screenHeight / 2;
-        wlp.width = LayoutParams.WRAP_CONTENT;
-        wlp.height = LayoutParams.WRAP_CONTENT;
-        createViews();
-        setVisibility(View.GONE);
-        timer = new Timer();
-
+        wlp.width = WindowManager.LayoutParams.WRAP_CONTENT;
+        wlp.height = WindowManager.LayoutParams.WRAP_CONTENT;
     }
 
 
@@ -120,6 +128,7 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
             rootView.setLayoutParams(new ViewGroup.LayoutParams(BALL_FULL_WIDTH + ROOT_VIEW_ADAPTIVE_DIP,
                     BALL_FULL_HEIGHT + ROOT_VIEW_ADAPTIVE_DIP));
         }
+
         if (ballIv == null) {
             ballIv = new ImageView(mContext);
             ballIv.setLayoutParams(new ViewGroup.LayoutParams(BALL_FULL_WIDTH, BALL_FULL_HEIGHT));
@@ -128,8 +137,8 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
             ballIv.setOnTouchListener(this);
         }
 
-
         if (mMenuIconRIds != null && mMenuIconRIds.length > 0) {
+            isHasMenu = true;
             if (menuLl == null) {
                 menuLl = new LinearLayout(mContext);
                 LinearLayout.LayoutParams menuLlLp = new LinearLayout.LayoutParams((MENU_BTN_WIDTH_HEIGHT + MENU_BTN_MARGIN)
@@ -157,8 +166,9 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
                     menuLl.addView(menuItemIv);
                 }
             }
-            isHasMenu = true;
         }
+
+        refreshRootViewGravity();
 
         if (isHasMenu) {
             rootView.addView(ballIv);
@@ -167,20 +177,7 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
         } else {
             rootView.addView(ballIv);
         }
-        this.addView(rootView);
-        wm.addView(this, wlp);
-    }
-
-
-    private void refreshViewOnHasMenu() {
-        //包含可展开的menu
-        if (isHasMenu) {
-            if (isRightSide) {
-                rootView.removeView(ballIv);
-            } else {
-                rootView.removeView(menuLl);
-            }
-        }
+        setVisibility(View.GONE);
     }
 
 
@@ -191,7 +188,14 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
     }
 
     public void setMenuIconRIds(int[] menuIconRIds) {
-        mMenuIconRIds = menuIconRIds;
+        if (mMenuIconRIds != null && menuIconRIds.length == mMenuIconRIds.length) {
+            mMenuIconRIds = menuIconRIds;
+            for (int i = 0; i < menuLl.getChildCount(); i++) {
+                ImageView iv = (ImageView) menuLl.getChildAt(i);
+                iv.setImageResource(mMenuIconRIds[i]);
+            }
+
+        }
     }
 
     public void setSmallScale(float smallScale) {
@@ -203,17 +207,13 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
 
     public void displayFull() {
         setVisibility(View.VISIBLE);
-        isOnlySmall = false;
-        isOnlyFullBall = true;
-        isMenuShowed = false;
-        refreshBallSize();
-        ballIv.setImageBitmap(fullBitmap);
-        wlp.alpha = 1f;
-        wm.updateViewLayout(this, wlp);
+        resetRootViewStatus(false, true, false);
+        refreshBall();
         startTimerTask();
     }
 
     public void displaySmall() {
+        resetRootViewStatus(true, false, false);
         Message message = mTimerHandler.obtainMessage();
         message.what = TO_SMALL_FLYING_BALL;
         mTimerHandler.sendMessage(message);
@@ -233,7 +233,7 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
     }
 
     public void destroy() {
-        removeFloatView();
+        removeRootView();
         stopTimerTask();
         if (timer != null) {
             timer.cancel();
@@ -243,7 +243,6 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
 
 
     private void startTimerTask() {
-        isOnlyFullBall = true;
         if (timerTask != null) {
             try {
                 timerTask.cancel();
@@ -266,28 +265,178 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
         }
     }
 
+    private void stopTimerTask() {
+        if (timerTask != null) {
+            timerTask.cancel();
+            timerTask = null;
+        }
+    }
+
+    private void removeRootView() {
+        try {
+            wm.removeView(this);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     private final Handler mTimerHandler = new Handler() {
         public void handleMessage(Message msg) {
             if (msg.what == TO_SMALL_FLYING_BALL) {
                 if (isOnlyFullBall) {
-                    isOnlyFullBall = false;
-                    isOnlySmall = true;
-                    isMenuShowed = false;
-                    refreshBallSize();
-                    if (isRightSide) {
-                        ballIv.setImageBitmap(rightBitmap);
-                    } else {
-                        ballIv.setImageBitmap(leftBitmap);
-                    }
-
-                    wlp.alpha = 0.7f;
-                    wm.updateViewLayout(FlyingBallView.this, wlp);
-                    refreshRootViewGravity();
+                    resetRootViewStatus(true, false, false);
+                    refreshBall();
                 }
             }
             super.handleMessage(msg);
         }
     };
+
+
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        stopTimerTask();
+        int xNow = (int) event.getRawX();
+        int yNow = (int) event.getRawY();
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                touchStartX = event.getX();
+                touchStartY = event.getY();
+                isMoved = false;
+
+                break;
+            case MotionEvent.ACTION_MOVE:
+                if (isOnlyFullBall) {
+                    float mMoveStartX = event.getX();
+                    float mMoveStartY = event.getY();
+                    if (Math.abs(touchStartX - mMoveStartX) > 2 && Math.abs(touchStartY - mMoveStartY) > 2) {
+                        isMoved = true;
+                        wlp.x = (int) (xNow - touchStartX);
+                        wlp.y = (int) (yNow - touchStartY);
+                        wm.updateViewLayout(this, wlp);
+                        return false;
+                    }
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+                if (!isMoved) {
+                    if (isOnlySmall) {
+                        resetRootViewStatus(false, true, false);
+                    } else if (isOnlyFullBall) {
+                        resetRootViewStatus(false, false, true);
+                    } else if (isMenuShowed) {
+                        resetRootViewStatus(false, true, false);
+                    }
+                }
+
+                if (wlp.x >= screenWidth / 2) {
+                    wlp.x = screenWidth;
+                    isRightSide = true;
+                } else if (wlp.x < screenWidth / 2) {
+                    wlp.x = 0;
+                    isRightSide = false;
+                }
+                wm.updateViewLayout(this, wlp);
+
+                if ((isOnlyFullBall || isMenuShowed) && !isMoved) {
+                    if (!isHasMenu) {
+                        if (System.currentTimeMillis() - clickBallLastTime > CLICK_BALL_TIME_INTERVAL) {
+                            mFlyingBallCallback.onBtnClick(FlyingBallImp.MAIN_BALL_CLICK, v);
+                            clickBallLastTime = System.currentTimeMillis();
+                        }
+                    } else {
+                        if (isMenuShowed) {
+                            menuLl.setVisibility(View.VISIBLE);
+                            refreshRootViewSize();
+                        } else {
+                            menuLl.setVisibility(View.GONE);
+                            refreshRootViewSize();
+                        }
+
+                    }
+                }
+
+                if (isOnlyFullBall && isMoved) {
+                    //当切换左右位置时
+                    if (isRightSide != isLastSideRight) {
+                        if (isCanResetRootView) {
+                            refreshRootViewChildOnHasMenu();
+                        }
+                        refreshRootViewGravity();
+                        isLastSideRight = isRightSide;
+                    }
+                }
+                refreshBall();
+                if (isOnlyFullBall) {
+                    startTimerTask();
+                }
+
+                // 重置
+                touchStartX = touchStartY = 0;
+                break;
+        }
+        return false;
+    }
+
+    private void resetRootViewStatus(boolean isOnlySmall, boolean isOnlyFullBall, boolean isMenuShowed) {
+        this.isOnlySmall = isOnlySmall;
+        this.isOnlyFullBall = isOnlyFullBall;
+        this.isMenuShowed = isMenuShowed;
+    }
+
+    private void refreshRootViewChildOnHasMenu() {
+        if (isHasMenu) {
+            if (isRightSide) {
+                rootView.removeView(ballIv);
+            } else {
+                rootView.removeView(menuLl);
+            }
+        }
+    }
+
+    private void refreshBall() {
+        ViewGroup.LayoutParams ballIvLayoutParams = ballIv.getLayoutParams();
+        if (isOnlySmall) {
+            if (isRightSide) {
+                ballIv.setImageBitmap(rightBitmap);
+            } else {
+                ballIv.setImageBitmap(leftBitmap);
+            }
+            ballIvLayoutParams.width = BALL_HALF_WIDTH;
+            ballIvLayoutParams.height = BALL_FULL_HEIGHT;
+            ballIv.setLayoutParams(ballIvLayoutParams);
+            wlp.alpha = 0.7f;
+            wm.updateViewLayout(FlyingBallView.this, wlp);
+        } else if (isOnlyFullBall || isMenuShowed) {
+            ballIvLayoutParams.width = BALL_FULL_WIDTH;
+            ballIvLayoutParams.height = BALL_FULL_HEIGHT;
+            ballIv.setLayoutParams(ballIvLayoutParams);
+            ballIv.setImageBitmap(fullBitmap);
+            wlp.alpha = 1f;
+            wm.updateViewLayout(this, wlp);
+        }
+    }
+
+    private void refreshRootViewSize() {
+        if (isHasMenu) {
+            FrameLayout.LayoutParams paramsFlFloat = (FrameLayout.LayoutParams) rootView.getLayoutParams();
+            if (isMenuShowed) {
+                paramsFlFloat.width = BALL_FULL_WIDTH + (MENU_BTN_WIDTH_HEIGHT + MENU_BTN_MARGIN) * mMenuIconRIds.length + ROOT_VIEW_ADAPTIVE_DIP;
+            } else {
+                paramsFlFloat.width = BALL_FULL_WIDTH + ROOT_VIEW_ADAPTIVE_DIP;
+            }
+            rootView.setLayoutParams(paramsFlFloat);
+        }
+    }
+
+
+    private void refreshRootViewGravity() {
+        if (isRightSide) {
+            rootView.setGravity(Gravity.RIGHT);
+        } else {
+            rootView.setGravity(Gravity.LEFT);
+        }
+    }
 
     @SuppressLint("NewApi")
     @Override
@@ -322,139 +471,6 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
         wm.updateViewLayout(this, wlp);
     }
 
-    @Override
-    public boolean onTouch(View v, MotionEvent event) {
-        stopTimerTask();
-        int x = (int) event.getRawX();
-        int y = (int) event.getRawY();
-        switch (event.getAction()) {
-            case MotionEvent.ACTION_DOWN:
-                touchStartX = event.getX();
-                touchStartY = event.getY();
-                refreshBallSize();
-                ballIv.setImageBitmap(fullBitmap);
-                wlp.alpha = 1f;
-                wm.updateViewLayout(this, wlp);
-                isMoved = false;
-                break;
-            case MotionEvent.ACTION_MOVE:
-                if (!isMenuShowed) {
-                    float mMoveStartX = event.getX();
-                    float mMoveStartY = event.getY();
-                    if (Math.abs(touchStartX - mMoveStartX) > 2 && Math.abs(touchStartY - mMoveStartY) > 2) {
-                        isMoved = true;
-                        wlp.x = (int) (x - touchStartX);
-                        wlp.y = (int) (y - touchStartY);
-                        wm.updateViewLayout(this, wlp);
-                        return false;
-                    }
-                }
-                break;
-            case MotionEvent.ACTION_UP:
-                if (wlp.x >= screenWidth / 2) {
-                    wlp.x = screenWidth;
-                    isRightSide = true;
-                } else if (wlp.x < screenWidth / 2) {
-                    isRightSide = false;
-                    wlp.x = 0;
-                }
-                wm.updateViewLayout(this, wlp);
-                if ((isOnlyFullBall || isMenuShowed) && !isMoved) {
-                    if (!isHasMenu) {
-                        if (System.currentTimeMillis() - clickBallLastTime > CLICK_BALL_TIME_INTERVAL) {
-                            mFlyingBallCallback.onBtnClick(FlyingBallImp.MAIN_BALL_CLICK, v);
-                            clickBallLastTime = System.currentTimeMillis();
-                        }
-                    } else {
-                        if (isMenuShowed) {
-                            isMenuShowed = false;
-                            isOnlyFullBall = true;
-                            refreshRootViewSize();
-                            menuLl.setVisibility(View.GONE);
-                            startTimerTask();
-                        } else {
-                            isMenuShowed = true;
-                            isOnlyFullBall = false;
-                            refreshRootViewSize();
-                            menuLl.setVisibility(View.VISIBLE);
-                            stopTimerTask();
-                        }
-                    }
-                }
-
-                if (isRightSide != isLastSideRight) {
-                    refreshRootViewGravity();
-                    if (isOnlyFullBall && isMoved) {
-                        refreshViewOnHasMenu();
-                    }
-                    isLastSideRight = isRightSide;
-                }
-                if (isOnlySmall || isMoved) {
-                    isOnlySmall = false;
-                    startTimerTask();
-                }
-                refreshBallSize();
-                ballIv.setImageBitmap(fullBitmap);
-
-                // 重置
-                touchStartX = touchStartY = 0;
-                break;
-        }
-        return false;
-    }
-
-    private void stopTimerTask() {
-        if (timerTask != null) {
-            timerTask.cancel();
-            timerTask = null;
-        }
-    }
-
-    private void removeFloatView() {
-        try {
-            wm.removeView(this);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void refreshBallSize() {
-        ViewGroup.LayoutParams ballIvLayoutParams = ballIv.getLayoutParams();
-        if (isOnlySmall) {
-            ballIvLayoutParams.width = BALL_HALF_WIDTH;
-            ballIvLayoutParams.height = BALL_FULL_HEIGHT;
-        } else {
-            ballIvLayoutParams.width = BALL_FULL_WIDTH;
-            ballIvLayoutParams.height = BALL_FULL_HEIGHT;
-        }
-
-        ballIv.setLayoutParams(ballIvLayoutParams);
-    }
-
-    private void refreshRootViewSize() {
-        FrameLayout.LayoutParams paramsFlFloat = (FrameLayout.LayoutParams) rootView.getLayoutParams();
-        if (isMenuShowed) {
-            paramsFlFloat.width = BALL_FULL_WIDTH + (MENU_BTN_WIDTH_HEIGHT + MENU_BTN_MARGIN) * mMenuIconRIds.length + ROOT_VIEW_ADAPTIVE_DIP;
-        } else {
-            paramsFlFloat.width = BALL_FULL_WIDTH + ROOT_VIEW_ADAPTIVE_DIP;
-        }
-        rootView.setLayoutParams(paramsFlFloat);
-    }
-
-
-    private void refreshRootViewGravity() {
-        FrameLayout.LayoutParams rootViewLP = (FrameLayout.LayoutParams) rootView.getLayoutParams();
-        if (isRightSide) {
-            rootViewLP.gravity = Gravity.RIGHT;
-            rootView.setGravity(Gravity.RIGHT);
-        } else {
-            rootViewLP.gravity = Gravity.LEFT;
-            rootView.setGravity(Gravity.LEFT);
-        }
-        rootView.setLayoutParams(rootViewLP);
-    }
-
-
     /**
      * 按比例生成新的full small icon drawable
      */
@@ -472,7 +488,6 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
         return (int) (dip * density + 0.5f);
     }
 
-
     class RootLinearLayout extends LinearLayout {
 
         public RootLinearLayout(Context context) {
@@ -487,6 +502,7 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
             } else if (child == menuLl) {
                 rootView.addView(menuLl);
             }
+
             menuLl.setVisibility(View.GONE);
             isMenuShowed = false;
         }

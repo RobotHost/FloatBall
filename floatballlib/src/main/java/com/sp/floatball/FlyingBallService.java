@@ -46,20 +46,20 @@ public class FlyingBallService extends Service {
 
 
     /**
-     * @param logoIconRId 浮标icon资源 id
+     * @param logoIconRId 替换浮标icon资源 id（用于某些场景下的图标状态变化）
      */
     public void setLogoIconRId(int logoIconRId) {
         if (flyingBallView != null) {
-
+            flyingBallView.setLogoIconRId(logoIconRId);
         }
     }
 
     /**
-     * @param menuIconRIds 展开目录中的icon资源id
+     * @param menuIconRIds 替换展开目录中的icon资源id（用于某些场景下的图标状态变化）,当初始化init接口中menuIconRIds参数不为null且两个menuIconRIds.length相同的时,该方法可用.
      */
     public void setMenuIconRIds(int[] menuIconRIds) {
         if (flyingBallView != null) {
-
+            flyingBallView.setMenuIconRIds(menuIconRIds);
         }
     }
 
@@ -68,7 +68,7 @@ public class FlyingBallService extends Service {
      */
     public void setSmallScale(float smallScale) {
         if (flyingBallView != null) {
-
+            flyingBallView.setSmallScale(smallScale);
         }
     }
 
