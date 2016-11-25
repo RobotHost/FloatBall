@@ -37,7 +37,6 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
     private Bitmap fullBitmap;
     private Bitmap rightBitmap;
     private Bitmap leftBitmap;
-
     private WindowManager.LayoutParams wlp;
     private WindowManager wm;
     private int screenWidth;
@@ -52,7 +51,6 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
     private boolean isMoved = false;
     private boolean isHasMenu = false;
     private boolean isMenuShowed = false;
-
     private float touchStartX;
     private float touchStartY;
     private Timer timer;
@@ -66,11 +64,11 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
     private static int MENU_BTN_MARGIN;// px
     private final static float FULL_ALPHA = 1f;
     private final static float HALF_ALPHA = 0.7f;
-
     private long clickBallLastTime = 0l;
     private final static long CLICK_BALL_TIME_INTERVAL = 1000l;
-
-    private boolean isCanResetRootView = false;//如果为true，这当在右边时，主浮标和菜单调换位置
+    //如果为true，当浮标在右边时，主浮标图标和菜单栏的位置将左右调换，使得主浮标靠边框。
+    // （但有一些视觉的bug：展开和缩回不美观，bug原因可能是WindowManager的gravity或width造成的，目前没有找到合理解决方案）
+    private boolean isCanResetRootView = false;
 
     @SuppressLint("NewApi")
     public FlyingBallView(Context context, int logoIconRId, @Nullable int[] menuIconRIds, @Nullable Float smallScale, FlyingBallImp.FlyingBallCallback flyingBallCallback) {
