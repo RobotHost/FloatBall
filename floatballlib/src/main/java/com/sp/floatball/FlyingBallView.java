@@ -26,7 +26,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 /**
- * Desction:悬浮窗 Author:pengjianbo Date:15/10/26 下午8:39
+ * Created by songyuan on 2016/11/1.
  */
 public class FlyingBallView extends FrameLayout implements OnTouchListener {
     private Context mContext;
