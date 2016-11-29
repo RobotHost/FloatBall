@@ -403,14 +403,14 @@ public class FlyingBallView extends FrameLayout implements OnTouchListener {
             ballIvLayoutParams.width = BALL_HALF_WIDTH;
             ballIvLayoutParams.height = BALL_FULL_HEIGHT;
             ballIv.setLayoutParams(ballIvLayoutParams);
-            wlp.alpha = 0.7f;
+            wlp.alpha = HALF_ALPHA;
             wm.updateViewLayout(FlyingBallView.this, wlp);
         } else if (isOnlyFullBall || isMenuShowed) {
             ballIvLayoutParams.width = BALL_FULL_WIDTH;
             ballIvLayoutParams.height = BALL_FULL_HEIGHT;
             ballIv.setLayoutParams(ballIvLayoutParams);
             ballIv.setImageBitmap(fullBitmap);
-            wlp.alpha = 1f;
+            wlp.alpha = FULL_ALPHA;
             wm.updateViewLayout(this, wlp);
         }
     }
